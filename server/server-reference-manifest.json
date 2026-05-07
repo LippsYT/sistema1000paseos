@@ -1,0 +1,14 @@
+{
+  "node": {
+    "95782b1e1076fb3466004aac058293259460d5ba": {
+      "workers": {
+        "app/page": "(action-browser)/./node_modules/next/dist/build/webpack/loaders/next-flight-action-entry-loader.js?actions=%5B%5B%22%2Fhome%2Fuser%2Fstudio%2Fsrc%2Fai%2Fflows%2Favailability-reasoning.ts%22%2C%5B%22availabilityReasoning%22%5D%5D%5D&__client_imported__=true!"
+      },
+      "layer": {
+        "app/page": "action-browser"
+      }
+    }
+  },
+  "edge": {},
+  "encryptionKey": "4EZgmy1aMfXZo5tMdsrvR+VZikqJSPt/DjZD7ioqDjQ="
+}
