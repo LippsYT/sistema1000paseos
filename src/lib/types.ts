@@ -51,6 +51,7 @@ export type Booking = {
   lockedPrice?: Price; // Snapshot de tarifa al confirmar la reserva
   providerId?: string | null; // ID of the provider for this service on this booking
   cost?: number; // Cost of the service from the provider for this booking
+  costManuallyEdited?: boolean; // Si es true, el costo fue editado a mano y no se recalcula con la tarifa del proveedor
   providerPaidAmount?: number; // Amount paid to the provider for this specific booking
   departureTime: string;
   total: number;

@@ -560,12 +560,14 @@ export default function ExportPage() {
         
         // Final Balance
         if (yPos > doc.internal.pageSize.height - 80) { doc.addPage(); yPos = 20; }
+        // netBalance = deuda con el proveedor - deuda de la agencia.
+        // Positivo => le debemos al proveedor (rojo). Negativo => saldo a nuestro favor (verde).
         const finalBalanceItems = [
-             { label: 'SALDO NETO FINAL:', value: `${netBalance < 0 ? '-' : ''}$${Math.abs(netBalance).toFixed(2)}`, color: (netBalance < 0 ? [255, 0, 0] as [number, number, number] : [0, 128, 0] as [number, number, number]) },
+             { label: 'SALDO NETO FINAL:', value: `${netBalance < 0 ? '-' : ''}$${Math.abs(netBalance).toFixed(2)}`, color: (netBalance > 0 ? [255, 0, 0] as [number, number, number] : [0, 128, 0] as [number, number, number]) },
         ];
         drawSummaryBox(doc, finalBalanceItems, yPos);
         doc.setFontSize(8);
-        doc.text(netBalance < 0 ? `(SALDO A PAGAR a ${entityName})` : `(SALDO A FAVOR de 1000 Paseos)`, doc.internal.pageSize.width - 14, (doc as any).lastAutoTable.finalY + 5, { align: 'right' });
+        doc.text(netBalance > 0 ? `(SALDO A PAGAR a ${entityName})` : `(SALDO A FAVOR de 1000 Paseos)`, doc.internal.pageSize.width - 14, (doc as any).lastAutoTable.finalY + 5, { align: 'right' });
 
 
         drawFooter(doc, yPos + 20, comments);

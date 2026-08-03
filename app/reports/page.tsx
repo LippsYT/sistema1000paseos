@@ -13,7 +13,7 @@ import type { DateRange } from "react-day-picker";
 import dynamic from 'next/dynamic';
 import { Calendar as CalendarIcon, Download, Printer, Pencil, UserPlus, FilePenLine, Star, Ticket, CircleCheck, CreditCard, Save, ThumbsDown, FileArchive, PlusCircle, Check, Eye, Repeat, Building, Truck, Combine, XCircle, Landmark, Copy, Notebook, ChevronsUpDown, Search, AlertCircle, Clock } from "lucide-react";
 
-import { cn, calculateProviderReportTotals, calculateSettlementAmount } from "@/lib/utils";
+import { cn, calculateProviderReportTotals, calculateSettlementAmount, applyLiveProviderCost } from "@/lib/utils";
 import { getBookings, getServices, getAgencies, db, doc, updateDoc, writeBatch, addDoc, collection, getProviders, getProviderPayments, getPaymentAccounts, createNotification, deleteField, getTicketLedgerEntry, createTicketLedgerEntry } from "@/lib/data";
 import type { Booking, Service, Agency, PrePurchase, Price, Provider, CombinedReportData, ProviderPayment, Pax, PaymentAccount, SettlementBooking, SettlementItem } from "@/lib/types";
 
@@ -661,6 +661,8 @@ function ReportsPageContent() {
           const num = parseNumberInput(value);
           if (num === null) return null;
           updated.cost = num;
+          // Marca el costo como manual para que no se pise con la tarifa del proveedor.
+          updated.costManuallyEdited = true;
           break;
         }
         case "providerPaidAmount": {
@@ -1157,11 +1159,14 @@ function ReportsPageContent() {
         const processedAgencyBookings = processReportData(agencyBookingsInPeriod, agency, excludeFreePax);
         const agencyTotals = calculateAgencyReportTotals(processedAgencyBookings, agency);
 
-        const providerBookingsForReport = bookings.filter(b => {
-            const bookingDate = new Date(b.date);
-            const statusMatch = b.status === 'Confirmed' || isCsvPending(b);
-            return bookingDate >= fromDate && bookingDate <= toDate && matchesProvider(b, provider) && statusMatch && !b.settlementId;
-        }).sort((a,b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+        const providerBookingsForReport = applyLiveProviderCost(
+            bookings.filter(b => {
+                const bookingDate = new Date(b.date);
+                const statusMatch = b.status === 'Confirmed' || isCsvPending(b);
+                return bookingDate >= fromDate && bookingDate <= toDate && matchesProvider(b, provider) && statusMatch && !b.settlementId;
+            }).sort((a,b) => new Date(a.date).getTime() - new Date(b.date).getTime()),
+            provider
+        );
         const providerTotals = calculateProviderReportTotals(providerBookingsForReport, providerPayments, provider);
 
         const netBalance = providerTotals.finalDebt - agencyTotals.saldoFinal;
@@ -1217,12 +1222,15 @@ function ReportsPageContent() {
                 });
             }
 
-            filteredBookings = bookings.filter(b => {
-                const bookingDate = new Date(b.date);
-                const isWithinRange = bookingDate >= fromDate && bookingDate <= toDate;
-                const statusMatch = b.status === 'Confirmed' || isCsvPending(b);
-                return isWithinRange && matchesProvider(b, entity as Provider) && statusMatch && !b.settlementId;
-            }).sort((a,b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+            filteredBookings = applyLiveProviderCost(
+                bookings.filter(b => {
+                    const bookingDate = new Date(b.date);
+                    const isWithinRange = bookingDate >= fromDate && bookingDate <= toDate;
+                    const statusMatch = b.status === 'Confirmed' || isCsvPending(b);
+                    return isWithinRange && matchesProvider(b, entity as Provider) && statusMatch && !b.settlementId;
+                }).sort((a,b) => new Date(a.date).getTime() - new Date(b.date).getTime()),
+                entity as Provider
+            );
         }
         
         const unsettledPayments = reportType === 'provider' ? providerPayments.filter(p => p.providerId === entity!.id && !p.settlementId) : [];
@@ -1833,10 +1841,18 @@ function ReportsPageContent() {
       const draft = parsed[key];
       if (!draft) return;
 
-      const restoredBookings = (draft.processedBookings || []).map((b: any) => ({
-        ...b,
-        date: b.date ? new Date(b.date) : b.date,
-      }));
+      // El borrador guarda los valores editados a mano, pero no debe congelar el costo
+      // del proveedor: si cambió la tarifa, el reporte recién generado ya trae el costo
+      // vigente y hay que conservarlo (salvo que ese costo se haya editado a mano).
+      const freshById = new Map(reportToDisplay.processedBookings.map(b => [b.id, b]));
+      const restoredBookings = (draft.processedBookings || []).map((b: any) => {
+        const fresh = freshById.get(b.id);
+        return {
+          ...b,
+          date: b.date ? new Date(b.date) : b.date,
+          cost: b.costManuallyEdited || !fresh ? b.cost : fresh.cost,
+        };
+      });
       const nextReport = {
         ...reportToDisplay,
         processedBookings: restoredBookings.length > 0 ? restoredBookings : reportToDisplay.processedBookings,
