@@ -22,6 +22,36 @@ export const calculatePrePurchaseCredits = (pax: Pax) => {
     return (pax.adults * 1) + (pax.children * 0.5);
 };
 
+/**
+ * Costo del proveedor para una reserva, calculado con la tarifa VIGENTE del proveedor.
+ * El campo booking.cost es solo un snapshot del momento en que se cargó la reserva, por
+ * eso hay que recalcular al armar el reporte: si no, cambiar el costo en la ficha del
+ * proveedor no se refleja en las liquidaciones.
+ * Si el proveedor no tiene costo cargado para ese servicio, se respeta el snapshot.
+ */
+export const calculateBookingProviderCost = (
+    booking: Booking,
+    provider: Provider | null | undefined
+): number => {
+    const providerServiceCost = provider?.services?.find(s => s.serviceId === booking.serviceId)?.cost;
+    if (!providerServiceCost) return booking.cost || 0;
+
+    const pax = booking.pax || { adults: 0, children: 0, infants: 0 };
+    return ((pax.adults || 0) * (providerServiceCost.adult || 0)) +
+           ((pax.children || 0) * (providerServiceCost.child || 0)) +
+           ((pax.infants || 0) * (providerServiceCost.infant || 0));
+};
+
+/** Devuelve las reservas con el costo del proveedor recalculado a tarifa vigente. */
+export const applyLiveProviderCost = <T extends Booking>(
+    bookings: T[],
+    provider: Provider | null | undefined
+): T[] => bookings.map(booking => (
+    (booking as any).costManuallyEdited
+        ? booking
+        : { ...booking, cost: calculateBookingProviderCost(booking, provider) }
+));
+
 export const calculateProviderReportTotals = (
     bookingsForReport: Booking[],
     allProviderPayments: ProviderPayment[],
