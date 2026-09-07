@@ -16,6 +16,7 @@ import {
   Calendar as CalendarIcon,
   Landmark,
   Upload,
+  Download,
 } from "lucide-react";
 import { getAgencies, getServices, getBookings, getPaymentAccounts, db, collection, addDoc, updateDoc, deleteDoc, doc, writeBatch } from "@/lib/data";
 import type { Agency, Service, Booking, PaymentAccount } from "@/lib/types";
@@ -187,6 +188,22 @@ export default function AgenciesPage() {
         agency.name.toLowerCase().includes(searchQuery.toLowerCase())
     );
   }, [agencies, searchQuery]);
+
+  const handleExportAgencyNames = () => {
+    if (agencies.length === 0) {
+      toast({ title: "Nada para exportar", description: "No hay agencias registradas todavía." });
+      return;
+    }
+
+    const names = [...agencies].sort((a, b) => a.name.localeCompare(b.name)).map(a => a.name);
+    const blob = new Blob([names.join("\n")], { type: "text/plain;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `agencias-${new Date().toISOString().slice(0, 10)}.txt`;
+    link.click();
+    URL.revokeObjectURL(url);
+  };
 
   const bookingsForAgency = React.useMemo(() => {
     if (!editingAgency) return [];
@@ -418,12 +435,18 @@ export default function AgenciesPage() {
         <h1 className="text-3xl font-bold tracking-tight font-headline">
           Gestión de Agencias
         </h1>
-        { (user?.role === 'super-admin') && (
-        <Button onClick={handleNewClick}>
-          <PlusCircle className="mr-2 h-4 w-4" />
-          Crear Agencia
-        </Button>
-        )}
+        <div className="flex items-center gap-2">
+          <Button variant="outline" onClick={handleExportAgencyNames}>
+            <Download className="mr-2 h-4 w-4" />
+            Exportar Nombres
+          </Button>
+          { (user?.role === 'super-admin') && (
+          <Button onClick={handleNewClick}>
+            <PlusCircle className="mr-2 h-4 w-4" />
+            Crear Agencia
+          </Button>
+          )}
+        </div>
       </div>
 
       <Dialog open={isFormOpen} onOpenChange={(open) => {

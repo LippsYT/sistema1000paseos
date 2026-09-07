@@ -163,6 +163,7 @@ export default function PaymentsPage() {
   const [isSubmitting, setIsSubmitting] = React.useState(false);
   const [selectedSettlements, setSelectedSettlements] = React.useState<string[]>([]);
   const [isArchiving, setIsArchiving] = React.useState(false);
+  const [confirmMarkAllPaid, setConfirmMarkAllPaid] = React.useState(false);
 
   const fileInputRef = React.useRef<HTMLInputElement>(null);
   const [settlementToUpdate, setSettlementToUpdate] = React.useState<Settlement | null>(null);
@@ -641,7 +642,43 @@ export default function PaymentsPage() {
       setIsSubmitting(false);
     }
   }
-  
+
+  const handleMarkAllAsPaid = async () => {
+    if (!user || settlementsPendingConfirmation.length === 0) return;
+    setIsSubmitting(true);
+    try {
+      const batch = writeBatch(db);
+      const datePaid = new Date();
+
+      for (const settlement of settlementsPendingConfirmation) {
+        const settlementRef = doc(db, "settlements", settlement.id);
+        batch.update(settlementRef, { status: "Pagado", datePaid });
+      }
+
+      await batch.commit();
+
+      if (user.role === 'admin') {
+        await createNotification('PAYMENT_CONFIRMED',
+            `El admin ${user.name} confirmó el pago de ${settlementsPendingConfirmation.length} liquidaciones.`,
+            { relatedUserId: user.id, userName: user.name }
+        );
+      }
+
+      toast({
+        title: "Pagos Confirmados",
+        description: `Se marcaron ${settlementsPendingConfirmation.length} liquidaciones como pagadas.`,
+        className: "bg-green-100 border-green-400 dark:bg-green-900/50"
+      });
+      fetchAllData();
+    } catch (error) {
+      console.error("Error confirming bulk payments:", error);
+      toast({ title: "Error", description: "No se pudieron confirmar los pagos.", variant: "destructive" });
+    } finally {
+      setIsSubmitting(false);
+      setConfirmMarkAllPaid(false);
+    }
+  }
+
   const handleDeleteSettlement = async () => {
     if (!settlementToDelete) return;
 
@@ -877,6 +914,10 @@ export default function PaymentsPage() {
     return filtered;
   }, [user, settlements, nameFilter, statusFilter, minAmount, maxAmount]);
 
+  const settlementsPendingConfirmation = React.useMemo(
+    () => filteredSettlements.filter(s => s.status === 'Comprobante Subido' || s.status === 'Pago en Efectivo Agendado' || s.status === 'Pendiente'),
+    [filteredSettlements]
+  );
 
   if (isLoading) {
     return (
@@ -894,6 +935,23 @@ export default function PaymentsPage() {
 
   return (
     <>
+    <AlertDialog open={confirmMarkAllPaid} onOpenChange={setConfirmMarkAllPaid}>
+        <AlertDialogContent>
+            <AlertDialogHeader>
+                <AlertDialogTitle>¿Marcar todas las liquidaciones como pagadas?</AlertDialogTitle>
+                <AlertDialogDescription>
+                    Se confirmará el pago de <strong>{settlementsPendingConfirmation.length}</strong> liquidación(es) pendiente(s), verificada(s) o agendada(s) que coinciden con los filtros actuales. Esta acción no se puede deshacer desde aquí (podés revertir una liquidación a la vez con "Revertir a Pendiente").
+                </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+                <AlertDialogCancel disabled={isSubmitting}>Cancelar</AlertDialogCancel>
+                <AlertDialogAction onClick={handleMarkAllAsPaid} disabled={isSubmitting} className="bg-green-600 hover:bg-green-700">
+                    {isSubmitting ? "Confirmando..." : "Sí, marcar todas como pagadas"}
+                </AlertDialogAction>
+            </AlertDialogFooter>
+        </AlertDialogContent>
+    </AlertDialog>
+
     <AlertDialog open={!!settlementToDelete} onOpenChange={() => setSettlementToDelete(null)}>
         <AlertDialogContent>
             <AlertDialogHeader>
@@ -1379,6 +1437,12 @@ export default function PaymentsPage() {
         </div>
         {(user?.role === 'admin' || user?.role === 'super-admin') &&
         <div className="flex items-center gap-2">
+            {settlementsPendingConfirmation.length > 0 && (
+                <Button onClick={() => setConfirmMarkAllPaid(true)} disabled={isSubmitting} className="bg-green-600 hover:bg-green-700">
+                    <CheckCircle className="mr-2 h-4 w-4"/>
+                    Marcar Todas como Pagadas ({settlementsPendingConfirmation.length})
+                </Button>
+            )}
             {isArchiving ? (
                 <>
                 <Button onClick={handleArchiveSelected} disabled={isSubmitting || selectedSettlements.length === 0}>
